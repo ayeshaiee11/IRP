@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Regression | TrendLens{% endblock %}
+{% block content %}
+<div class="top">
+  <div><h1>Regression</h1><div class="sub">Predict one column from all the others. Compares Linear, Ridge, Lasso, feature selection, Polynomial and PCA.</div></div>
+</div>
+
+<div class="card">
+  {% if r %}
+  <form method="post" class="row" style="gap:12px;flex-wrap:wrap;align-items:center">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="filename" value="{{ filename }}">
+    <span class="small">File: <b>{{ filename }}</b></span>
+    <label class="small">Column to predict
+      <select name="target">{% for c in columns %}<option value="{{ c }}" {{ 'selected' if c == r.target }}>{{ c }}</option>{% endfor %}</select>
+    </label>
+    <button type="submit">Re-run</button>
+    <a class="small" href="{{ url_for('regression') }}">Upload another file</a>
+  </form>
+  {% else %}
+  <form method="post" enctype="multipart/form-data" class="row" style="gap:12px;flex-wrap:wrap;align-items:center">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit">Run regression</button>
+  </form>
+  <div class="small" style="margin-top:8px">Any CSV up to 200 MB. Text and missing values are handled automatically. You can change the target column after the first run.</div>
+  {% endif %}
+</div>
+
+{% if r %}
+<div class="grid4">
+  <div class="card"><div class="lab">Predicting</div><div class="val sm">{{ r.target }}</div><div class="small">avg {{ r.target_stats.mean }}</div></div>
+  <div class="card"><div class="lab">Best model</div><div class="val sm">{{ r.best }}</div><div class="small">R&sup2; {{ r.best_r2 }} on unseen data</div></div>
+  <div class="card"><div class="lab">Rows</div><div class="val sm">{{ '{:,}'.format(r.rows_used) }}</div><div class="small">{% if r.rows_total > r.rows_used %}sampled from {{ '{:,}'.format(r.rows_total) }}{% else %}all used{% endif %}</div></div>
+  <div class="card"><div class="lab">Features</div><div class="val sm">{{ r.n_features }}</div><div class="small">{% if r.dropped %}ignored: {{ r.dropped|join(', ') }}{% else %}none ignored{% endif %}</div></div>
+</div>
+
+<div class="two">
+  <div class="card">
+    <div class="lab">Model comparison (R&sup2; on unseen data)</div>
+    <div style="height:280px"><canvas id="rg-bars"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="lab">Actual vs predicted ({{ r.best }})</div>
+    <div style="height:280px"><canvas id="rg-scatter"></canvas></div>
+    <div class="small" style="margin-top:6px">Points close to the diagonal line mean good predictions.</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="lab">Results</div>
+  <div class="scroll"><table>
+    <tr><th>Model</th><th>Test R&sup2;</th><th>Train R&sup2;</th><th>RMSE</th><th>Notes</th></tr>
+    {% for m in r.models %}
+    <tr {% if m.name == r.best %}style="font-weight:600"{% endif %}>
+      <td title="{{ m.desc }}">{{ m.name }}{% if m.name == r.best %} &#9733;{% endif %}</td>
+      {% if m.error %}<td colspan="4">{{ m.error }}</td>
+      {% else %}<td>{{ m.test_r2 }}</td><td>{{ m.train_r2 }}</td><td>{{ m.rmse }}</td><td class="small">{{ m.note }}</td>{% endif %}
+    </tr>{% endfor %}
+  </table></div>
+  <div class="small" style="margin-top:8px">Test R&sup2; is measured on 20% of rows the model never saw. If Train is far above Test, the model is overfitting.</div>
+</div>
+
+{% if r.drivers %}
+<div class="card">
+  <div class="lab">Biggest drivers (standardized Ridge coefficients)</div>
+  <div class="scroll"><table>
+    {% for d in r.drivers %}<tr><td>{{ d.name }}</td><td class="r">{{ '%+.3f'|format(d.coef) }}</td></tr>{% endfor %}
+  </table></div>
+  <div class="small" style="margin-top:8px">Larger absolute value = stronger influence on {{ r.target }}. This shows association, not proof of cause.</div>
+</div>
+{% endif %}
+
+<script id="rg-data" type="application/json">{{ r|tojson }}</script>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if r %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function () {
+  var r = JSON.parse(document.getElementById('rg-data').textContent);
+  Chart.defaults.color = '#CBC0B2';
+  Chart.defaults.borderColor = 'rgba(203,192,178,.15)';
+  var ok = r.models.filter(function (m) { return m.test_r2 !== null; });
+  new Chart(document.getElementById('rg-bars'), {
+    type: 'bar',
+    data: { labels: ok.map(function (m) { return m.name; }),
+            datasets: [{ data: ok.map(function (m) { return m.test_r2; }),
+                         backgroundColor: ok.map(function (m) { return m.name === r.best ? '#d63a52' : '#CBC0B2'; }) }] },
+    options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false } },
+               scales: { x: { suggestedMax: 1 } } }
+  });
+  new Chart(document.getElementById('rg-scatter'), {
+    type: 'scatter',
+    data: { datasets: [
+      { label: 'Predictions', data: r.points, backgroundColor: 'rgba(214,58,82,.5)', pointRadius: 2.5 },
+      { label: 'Perfect', type: 'line', data: [{ x: r.line[0], y: r.line[0] }, { x: r.line[1], y: r.line[1] }],
+        borderColor: '#F8F8F7', borderWidth: 1.5, pointRadius: 0 } ] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+               scales: { x: { title: { display: true, text: 'Actual' } }, y: { title: { display: true, text: 'Predicted' } } } }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

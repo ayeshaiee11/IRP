@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>See where your data is heading</h1>
+  <p class="sub big">Upload a dataset. Get a trendline, a forecast with uncertainty, and results explained in plain English.</p>
+  <div class="row"><a class="btn p" href="{{ url_for('upload') }}">Start analysis</a><a class="btn" href="{{ url_for('history') }}">View saved analyses</a></div>
+</section>
+<div class="grid3">
+  <div class="card tilt"><div class="lab">01</div><h2>Trendline</h2><p class="small">Fits a linear regression to any numeric series and shows the slope and R&sup2;.</p></div>
+  <div class="card tilt"><div class="lab">02</div><h2>Forecast</h2><p class="small">Predicts the next periods with a 95% range, and flags pattern changes.</p></div>
+  <div class="card tilt"><div class="lab">03</div><h2>Insights</h2><p class="small">Every result comes with a plain-English summary anyone can read.</p></div>
+</div>
+{% endblock %}

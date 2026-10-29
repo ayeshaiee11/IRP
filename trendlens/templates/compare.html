@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Compare | TrendLens{% endblock %}
+{% block content %}
+<div class="top"><div><h1>Compare</h1><div class="sub">Two saved analyses, side by side.</div></div>
+{% if rows %}<form method="get" class="row">
+  <select name="a" data-autosubmit>{% for x in runs %}<option value="{{ x.id }}" {{ 'selected' if x.id == a.id }}>{{ x.name }}</option>{% endfor %}</select>
+  <span class="small">vs</span>
+  <select name="b" data-autosubmit>{% for x in runs %}<option value="{{ x.id }}" {{ 'selected' if x.id == b.id }}>{{ x.name }}</option>{% endfor %}</select>
+</form>{% endif %}</div>
+{% if not rows %}
+<div class="card small">You need at least two saved analyses to compare. <a href="{{ url_for('upload') }}">Add one</a>.</div>
+{% else %}
+{% for row in rows %}
+<div class="card tilt" style="margin-bottom:12px"><div class="lab">{{ row.label }}</div>
+  <div class="row" style="margin-top:10px"><span class="w">{{ row.texts[0] }}</span><div class="bar a" data-w="{{ row.widths[0] }}"></div></div>
+  <div class="row" style="margin-top:8px"><span class="w">{{ row.texts[1] }}</span><div class="bar b" data-w="{{ row.widths[1] }}"></div></div>
+</div>
+{% endfor %}
+<div class="legend"><span><i style="background:#d63a52"></i>{{ a.name }}</span><span><i style="background:#CBC0B2"></i>{{ b.name }}</span></div>
+{% endif %}
+{% endblock %}

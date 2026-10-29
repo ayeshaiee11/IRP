@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Upload data | TrendLens{% endblock %}
+{% block content %}
+<div class="top"><div><h1>Upload data</h1><div class="sub">CSV with a label column (year, date, quarter) and a numeric column. At least 5 rows, max 2 MB.</div></div></div>
+{% if not step2 %}
+<form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="card">
+  <label class="drop" id="drop"><b>Drop a CSV here or click to browse</b><span class="small" id="fname">No file chosen</span>
+    <input type="file" name="file" id="file" accept=".csv" hidden></label>
+  <div class="row" style="margin-top:14px"><button class="p" type="submit">Upload and preview</button></div>
+</form>
+<h2 style="margin-top:26px">Or try a sample</h2>
+<div class="row">
+  {% for key, s in samples.items() %}
+  <form method="post" action="{{ url_for('run_analysis') }}"><input type="hidden" name="sample" value="{{ key }}"><button type="submit">{{ s[0] }}</button></form>
+  {% endfor %}
+</div>
+{% else %}
+<form method="post" action="{{ url_for('run_analysis') }}" class="card">
+  <div class="lab">Preview: {{ filename }}</div>
+  <div class="scroll"><table><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr>
+    {% for row in preview %}<tr>{% for c in columns %}<td>{{ row[c] }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  <input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="filename" value="{{ filename }}">
+  <div class="row" style="margin-top:14px">
+    <label class="small">Name <input type="text" name="run_name" value="{{ filename.rsplit('.',1)[0] }}" maxlength="60"></label>
+    <label class="small">Labels <select name="label_col">{% for c in columns %}<option {{ 'selected' if c == suggestion.label }}>{{ c }}</option>{% endfor %}</select></label>
+    <label class="small">Values <select name="value_col">{% for c in columns %}<option {{ 'selected' if c == suggestion.value }}>{{ c }}</option>{% endfor %}</select></label>
+    <label class="small">Forecast periods <input type="number" name="horizon" value="4" min="1" max="12"></label>
+    <button class="p" type="submit">Run analysis</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

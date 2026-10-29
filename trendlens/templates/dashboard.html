@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ r.name }} | TrendLens{% endblock %}
+{% block content %}
+{% set last = r.forecast[-1] %}
+<div class="top">
+  <div><h1>{{ r.name }}</h1><div class="sub">Linear regression, trendline and forecast.</div></div>
+  <form method="get" class="row">
+    <label class="small">Forecast periods <input type="range" name="h" min="1" max="12" value="{{ r.horizon }}" data-autosubmit> <b>{{ r.horizon }}</b></label>
+  </form>
+</div>
+<div class="grid4">
+  <div class="card tilt"><div class="lab">Trend</div><div class="val sm">{{ '&#8599;' if r.trend.slope >= 0 else '&#8600;' }} {{ r.direction }}</div><div class="small">over {{ r.metrics.n }} {{ r.step }}s</div></div>
+  <div class="card tilt"><div class="lab">Slope</div><div class="val"><span class="count" data-to="{{ r.trend.slope }}" data-dec="2" data-pre="{{ '+' if r.trend.slope >= 0 }}">0</span></div><div class="small">{{ r.unit }} per {{ r.step }}</div></div>
+  <div class="card tilt"><div class="lab">R&sup2; score</div><div class="val"><span class="count" data-to="{{ r.metrics.r2 }}" data-dec="2">0</span></div><div class="small">{{ (r.metrics.r2 * 100)|round|int }}% explained</div></div>
+  <div class="card tilt"><div class="lab">Forecast {{ last.label }}</div><div class="val"><span class="count" data-to="{{ last.value }}" data-dec="1">0</span></div><div class="small">range {{ '%.1f'|format(last.lower) }} to {{ '%.1f'|format(last.upper) }}</div></div>
+</div>
+<div class="two">
+  <div class="card">
+    <div class="legend"><span><i style="background:#9b2236"></i>Actual</span><span><i style="background:#CBC0B2"></i>Forecast</span><span><i style="background:#F8F8F7"></i>Trendline</span><span><i style="background:rgba(214,58,82,.4)"></i>Range</span></div>
+    <div id="gl"><span class="hint">Drag to rotate</span></div>
+    <div class="small" style="margin-top:8px">{{ r.labels[0] }} to {{ last.label }} (forecast shown in sand)</div>
+  </div>
+  <div class="card tilt">
+    <div class="lab">Plain-English insights</div>
+    <p class="ins">{{ r.summary }}</p>
+    <div class="lab" style="margin-top:14px">Metrics</div>
+    <table>
+      <tr><td>MAE</td><td class="r">{{ '%.2f'|format(r.metrics.mae) }}</td></tr>
+      <tr><td>RMSE</td><td class="r">{{ '%.2f'|format(r.metrics.rmse) }}</td></tr>
+      <tr><td>Rows</td><td class="r">{{ r.metrics.n }}</td></tr>
+    </table>
+  </div>
+</div>
+<div class="card">
+  <div class="lab">Forecast table</div>
+  <div class="scroll"><table><tr><th>Period</th><th>Predicted</th><th>Lower (95%)</th><th>Upper (95%)</th></tr>
+    {% for f in r.forecast %}<tr><td>{{ f.label }}</td><td>{{ '%.1f'|format(f.value) }}</td><td>{{ '%.1f'|format(f.lower) }}</td><td>{{ '%.1f'|format(f.upper) }}</td></tr>{% endfor %}</table></div>
+</div>
+<script id="tl-data" type="application/json">{{ chart|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="{{ url_for('static', filename='js/chart3d.js') }}"></script>
+{% endblock %}
