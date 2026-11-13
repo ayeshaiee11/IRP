@@ -72,10 +72,80 @@
 
 <script id="rg-data" type="application/json">{{ r|tojson }}</script>
 {% endif %}
+
+<section id="btc-predictor" style="margin-top:26px">
+  <div class="top">
+    <div>
+      <h2>Bitcoin Price &amp; ROI Predictor</h2>
+      <div class="sub">Linear regression on the Close prices in data/bitcoin.csv. Choose an amount, a horizon and a market sentiment.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <form method="get" action="{{ url_for('regression') }}#btc-predictor" class="btc-form">
+      <div class="fld">
+        <label class="lab" for="btc-amount">Investment amount ($)</label>
+        <input type="number" id="btc-amount" name="amount" min="1" step="any" value="{{ btc_form.amount }}" required>
+      </div>
+      <div class="fld">
+        <span class="lab" style="display:block;margin-bottom:8px">Forecast horizon</span>
+        <div class="seg">
+          {% for h in btc_horizons %}
+          <input type="radio" id="btc-h{{ h }}" name="horizon" value="{{ h }}" {% if btc_form.horizon == h %}checked{% endif %}>
+          <label for="btc-h{{ h }}">{{ h }} Days</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="fld">
+        <span class="lab" style="display:block;margin-bottom:8px">Market sentiment</span>
+        <div class="seg">
+          {% for key, label in [('bullish', 'Bullish'), ('neutral', 'Neutral'), ('bearish', 'Bearish')] %}
+          <input type="radio" id="btc-s-{{ key }}" name="sentiment" value="{{ key }}" {% if btc_form.sentiment == key %}checked{% endif %}>
+          <label for="btc-s-{{ key }}">{{ label }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div><button type="submit" class="p">Calculate Bitcoin Forecast</button></div>
+    </form>
+  </div>
+
+  {% if btc_error %}
+  <div class="flash error" role="alert">{{ btc_error }}</div>
+  {% elif btc %}
+  <div class="grid3" style="margin-bottom:14px">
+    <div class="card">
+      <div class="lab">Predicted BTC price</div>
+      <div class="val sm">${{ '{:,.2f}'.format(btc.predicted) }}</div>
+      <div class="small">in {{ btc_form.horizon }} days &middot; latest close ${{ '{:,.2f}'.format(btc.last_close) }} ({{ btc.last_date }})</div>
+    </div>
+    <div class="card">
+      <div class="lab">Estimated portfolio value</div>
+      <div class="val sm">${{ '{:,.2f}'.format(btc.value) }}</div>
+      <div class="small">{{ '{:.6f}'.format(btc.btc_owned) }} BTC bought at the latest close</div>
+    </div>
+    <div class="card">
+      <div class="lab">Projected profit / loss</div>
+      <div class="val sm {{ 'gain' if btc.profit >= 0 else 'loss' }}">{{ '+' if btc.profit >= 0 else '-' }}${{ '{:,.2f}'.format(btc.profit|abs) }}</div>
+      <div class="small">{{ '{:+,.2f}'.format(btc.roi_pct) }}% ROI</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="lab">Historical close and linear regression forecast</div>
+    <div class="btc-chart"><canvas id="btc-chart" aria-label="Bitcoin historical close with dashed regression forecast"></canvas></div>
+    <div class="small" style="margin-top:8px">
+      Regression slope {{ '{:+,.2f}'.format(btc.slope) }} $/day &times; {{ btc.mult }} ({{ btc_form.sentiment }}) &middot;
+      R&sup2; {{ '{:.3f}'.format(btc.r2) }} &middot; {{ '{:,}'.format(btc.rows) }} rows through {{ btc.last_date }}.
+      The forecast starts at the latest close. Educational model only, not financial advice.
+    </div>
+  </div>
+  <script id="btc-data" type="application/json">{{ btc.chart|tojson }}</script>
+  {% endif %}
+</section>
 {% endblock %}
 {% block scripts %}
-{% if r %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% if r %}
 <script>
 (function () {
   var r = JSON.parse(document.getElementById('rg-data').textContent);
@@ -99,6 +169,57 @@
     options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
                scales: { x: { title: { display: true, text: 'Actual' } }, y: { title: { display: true, text: 'Predicted' } } } }
   });
+})();
+</script>
+{% endif %}
+{% if btc %}
+<script>
+(function () {
+  var el = document.getElementById('btc-chart'), src = document.getElementById('btc-data');
+  if (!el || !src || !window.Chart) return;
+  var d = JSON.parse(src.textContent), root = document.documentElement;
+
+  var chart = new Chart(el, {
+    type: 'line',
+    data: { labels: d.labels, datasets: [
+      { label: 'Historical close', data: d.history, borderWidth: 2, pointRadius: 0, tension: .15, fill: false },
+      { label: 'Regression trendline', data: d.trend, borderWidth: 1.5, borderDash: [2, 4], pointRadius: 0, fill: false },
+      { label: 'Forecast', data: d.forecast, borderWidth: 2.5, borderDash: [8, 6], pointRadius: 0, fill: false }
+    ] },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: {} },
+        tooltip: {
+          filter: function (i) { return i.parsed.y != null; },
+          callbacks: { label: function (c) {
+            return c.dataset.label + ': $' + c.parsed.y.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          } }
+        }
+      },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: {} },
+        y: { ticks: { callback: function (v) { return '$' + Number(v).toLocaleString(); } }, grid: {} }
+      }
+    }
+  });
+
+  // Colours come from the site palette and follow the light/dark toggle
+  function paint() {
+    var dark = root.dataset.theme === 'dark';
+    var c = dark
+      ? { hist: '#d63a52', fc: '#CBC0B2', trend: 'rgba(248,248,247,.4)', grid: 'rgba(203,192,178,.15)', text: '#CBC0B2' }
+      : { hist: '#550B14', fc: '#d63a52', trend: 'rgba(29,18,20,.35)', grid: 'rgba(29,18,20,.08)', text: '#7E6961' };
+    var ds = chart.data.datasets, o = chart.options;
+    ds[0].borderColor = c.hist; ds[1].borderColor = c.trend; ds[2].borderColor = c.fc;
+    o.plugins.legend.labels.color = c.text;
+    o.scales.x.ticks.color = c.text; o.scales.y.ticks.color = c.text;
+    o.scales.x.grid.color = c.grid; o.scales.y.grid.color = c.grid;
+    chart.update('none');
+  }
+  paint();
+  new MutationObserver(paint).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
 })();
 </script>
 {% endif %}

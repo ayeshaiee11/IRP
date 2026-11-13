@@ -44,3 +44,15 @@ table{width:100%;border-collapse:collapse}td,th{padding:9px 6px;border-bottom:1p
 @keyframes up{from{opacity:0;translate:0 18px}to{opacity:1;translate:0 0}}
 @media (max-width:860px){.app{grid-template-columns:1fr}aside{position:fixed;z-index:9;left:0;top:0;width:230px;transform:translateX(-105%);transition:transform .3s}aside.open{transform:none}.burger{display:inline-block}.grid4{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}main{padding:16px}}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition:none!important}}
+/* Bitcoin predictor (regression page) */
+.btc-form{display:grid;gap:18px}
+.btc-form input[type=number]{width:200px}
+.seg{display:flex;gap:8px;flex-wrap:wrap;position:relative}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 16px;border-radius:10px;cursor:pointer;font-size:.9rem;transition:.15s}
+.seg label:hover{border-color:var(--acc)}
+.seg input:checked+label{background:linear-gradient(135deg,#d63a52,#550B14);border-color:transparent;color:#fff}
+.seg input:focus-visible+label{outline:3px solid var(--acc);outline-offset:2px}
+.val.gain{background:none;color:#2f9e63}
+.val.loss{background:none;color:var(--acc)}
+.btc-chart{height:380px;position:relative}
