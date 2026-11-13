@@ -1,8 +1,12 @@
 """Flask application: routes that connect the website to the model, data handling and storage."""
+import math
 import os
 import re
 import uuid
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 
@@ -18,6 +22,114 @@ SAMPLES = {
     "sales": ("Quarterly sales", "sample_sales.csv"),
 }
 TOKEN_RE = re.compile(r"^[a-f0-9]{32}\.csv$")
+
+# ---------- Bitcoin Price & ROI Predictor ----------
+BTC_CSV = BASE / "data" / "btc.csv"
+BTC_HORIZONS = (7, 14, 30, 90)
+BTC_SENTIMENT = {"bullish": 1.25, "neutral": 1.0, "bearish": 0.75}
+BTC_FIT_DAYS = None  # None = fit on every row; e.g. 365 = fit only on the most recent year
+BTC_DEFAULTS = {"amount": 1000.0, "horizon": 30, "sentiment": "neutral"}
+
+
+def btc_load():
+    """Load historical Bitcoin prices from data/btc.csv."""
+    if not BTC_CSV.exists():
+        raise FileNotFoundError("data/btc.csv was not found.")
+
+    raw = pd.read_csv(BTC_CSV)
+
+    cols = {str(c).strip().lower(): c for c in raw.columns}
+
+    if "time" not in cols or "priceusd" not in cols:
+        raise ValueError("btc.csv needs 'time' and 'PriceUSD' columns.")
+
+    df = pd.DataFrame({
+        "Date": pd.to_datetime(raw[cols["time"]], errors="coerce"),
+        "Close": pd.to_numeric(raw[cols["priceusd"]], errors="coerce")
+    })
+
+    df = df.dropna()
+    df = df[df["Close"] > 0]
+    df = df.sort_values("Date")
+    df = df.drop_duplicates("Date", keep="last").reset_index(drop=True)
+
+    if len(df) < 10:
+        raise ValueError("Not enough valid Bitcoin price records.")
+
+    return df
+
+
+def btc_forecast(df, amount, horizon, sentiment):
+    """Linear regression on Close, then a sentiment-adjusted forecast and portfolio ROI."""
+    fit = df
+    if BTC_FIT_DAYS:
+        recent = df[df["Date"] >= df["Date"].iloc[-1] - pd.Timedelta(days=BTC_FIT_DAYS)]
+        if len(recent) >= 10:
+            fit = recent
+    t0 = fit["Date"].iloc[0]
+    day = lambda s: (s - t0).dt.total_seconds().to_numpy(dtype=float) / 86400.0
+    x, y = day(fit["Date"]), fit["Close"].to_numpy(dtype=float)
+    slope, intercept = np.polyfit(x, y, 1)
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r2 = 1 - float(np.sum((y - (slope * x + intercept)) ** 2)) / ss_tot if ss_tot else 0.0
+
+    # Sentiment scales the slope. On a downtrend the multiplier is mirrored, so
+    # "bullish" always means a better outcome than "bearish".
+    base = BTC_SENTIMENT[sentiment]
+    mult = base if slope >= 0 else 2 - base
+    eff = float(slope) * mult
+
+    last_close = float(df["Close"].iloc[-1])
+    last_date = df["Date"].iloc[-1]
+    fc = [max(last_close + eff * d, 0.0) for d in range(1, horizon + 1)]
+    fc_labels = [(last_date + pd.Timedelta(days=d)).strftime("%Y-%m-%d") for d in range(1, horizon + 1)]
+    predicted = fc[-1]
+    btc_owned = amount / last_close
+    value = btc_owned * predicted
+    profit = value - amount
+
+    # Chart data: thin out the history for speed (the regression above used every row)
+    n = len(df)
+    idx = np.unique(np.linspace(0, n - 1, min(n, 600)).astype(int))
+    all_x = day(df["Date"])
+    hist = [round(float(v), 2) for v in df["Close"].to_numpy(dtype=float)[idx]]
+    trend = [round(float(v), 2) for v in (slope * all_x + intercept)[idx]]
+    hn = len(hist)
+    chart = {
+        "labels": df["Date"].dt.strftime("%Y-%m-%d").to_numpy()[idx].tolist() + fc_labels,
+        "history": hist + [None] * horizon,
+        "trend": trend + [None] * horizon,
+        "forecast": [None] * (hn - 1) + [round(last_close, 2)] + [round(p, 2) for p in fc],
+    }
+    return {
+        "chart": chart, "last_close": last_close, "last_date": last_date.strftime("%Y-%m-%d"),
+        "predicted": predicted, "value": value, "profit": profit,
+        "roi_pct": profit / amount * 100, "btc_owned": btc_owned,
+        "slope": float(slope), "mult": mult, "r2": r2, "rows": n,
+    }
+
+
+def btc_context(args):
+    """Template variables for the predictor. Inputs come from the query string (GET form)."""
+    form = dict(BTC_DEFAULTS)
+    try:
+        amount = float(args.get("amount", form["amount"]))
+        if math.isfinite(amount):
+            form["amount"] = min(max(amount, 1.0), 1e9)
+    except (TypeError, ValueError):
+        pass
+    horizon = args.get("horizon", type=int)
+    if horizon in BTC_HORIZONS:
+        form["horizon"] = horizon
+    sentiment = (args.get("sentiment") or "").lower()
+    if sentiment in BTC_SENTIMENT:
+        form["sentiment"] = sentiment
+    btc, error = None, None
+    try:
+        btc = btc_forecast(btc_load(), **form)
+    except Exception as e:  # shown on the page instead of a 500 error
+        error = str(e)
+    return {"btc": btc, "btc_error": error, "btc_form": form, "btc_horizons": BTC_HORIZONS}
 
 
 def create_app(config=None):
@@ -52,6 +164,13 @@ def create_app(config=None):
             df = dh.load_dataset(BASE / "data" / fname)
             cols = dh.suggest_columns(df)
             analyze_and_save(name, df, cols["label"], cols["value"], 4)
+
+    @app.context_processor
+    def inject_btc():
+        """Give regression.html the Bitcoin predictor variables (only on that page)."""
+        if request.endpoint == "regression":
+            return btc_context(request.args)
+        return {}
 
     # ---------- pages ----------
     @app.route("/")
