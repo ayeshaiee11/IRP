@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}About | TrendLens{% endblock %}
+{% block content %}
+<div class="top"><div><h1>How it works</h1><div class="sub">From a raw CSV to plain-English insights.</div></div></div>
+<div class="grid3">
+  {% for s in ['Input data','Data preparation','Relationship analysis','Linear regression','Prediction','Visualization and insights'] %}
+  <div class="card tilt step"><span class="num">{{ loop.index }}</span><b>{{ s }}</b></div>
+  {% endfor %}
+</div>
+<div class="card" style="margin-top:14px"><div class="lab">Supported data</div>
+  <p class="ins">Any CSV with a label column (year, date, quarter, name) and at least one numeric column, with 5 or more rows. Works for pollution, fuel, agriculture, sales and any other numeric trend.</p></div>
+{% endblock %}

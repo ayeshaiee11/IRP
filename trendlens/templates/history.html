@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}History | TrendLens{% endblock %}
+{% block content %}
+<div class="top"><div><h1>History</h1><div class="sub">Every analysis is saved in the SQLite database.</div></div></div>
+{% for run in runs %}
+<div class="card tilt row" style="margin-bottom:12px">
+  <div style="flex:1"><b>{{ run.name }}</b><div class="small">{{ run.created_at }} &middot; R&sup2; {{ '%.2f'|format(run.r2) }} &middot; {{ run.direction }}</div></div>
+  <a class="btn p" href="{{ url_for('dashboard', run_id=run.id) }}">View</a>
+  <form method="post" action="{{ url_for('delete', run_id=run.id) }}"><button type="submit">Delete</button></form>
+</div>
+{% else %}
+<div class="card small">No saved analyses yet. <a href="{{ url_for('upload') }}">Upload a dataset</a> to start.</div>
+{% endfor %}
+{% endblock %}

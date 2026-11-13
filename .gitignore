@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # v0 sandbox internal files
 __v0_runtime_loader.js
 __v0_devtools.tsx
@@ -14,3 +15,9 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+=======
+﻿venv/
+__pycache__/
+*.pyc
+.env
+>>>>>>> 5ea3b4a55907fdb7e2f1dd4da13c151544092867
